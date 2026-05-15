@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TS ServiceDesk & IAM — Ticket Analysis Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  :root{
+    --bg:#0B0F1A;--bg-card:#131929;--bg-row:#1A2236;--bg-row-alt:#161D2F;--border:#2A3348;
+    --teal:#00D4AA;--amber:#F59E0B;--red:#EF4444;--blue:#60A5FA;--purple:#A78BFA;--green:#4ADE80;
+    --text:#E8EDF5;--muted:#7A8499;
+    --teal-dim:rgba(0,212,170,.12);--amber-dim:rgba(245,158,11,.12);--red-dim:rgba(239,68,68,.12);
+    --purple-dim:rgba(167,139,250,.12);--green-dim:rgba(74,222,128,.12);
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{background:var(--bg);color:var(--text);font-family:'IBM Plex Sans',sans-serif;font-size:14px;min-height:100vh;}
+
+  /* HEADER */
+  .header{background:var(--bg-card);border-bottom:1px solid var(--border);padding:14px 28px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;}
+  .header-left h1{font-size:17px;font-weight:700;color:var(--teal);}
+  .header-left .sub{font-size:11px;color:var(--muted);font-family:'IBM Plex Mono',monospace;margin-top:3px;}
+  .controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap;}
+  .live-pill{background:var(--green-dim);border:1px solid var(--green);border-radius:20px;padding:5px 12px;color:var(--green);font-size:11px;font-family:'IBM Plex Mono',monospace;}
+  select{background:var(--bg-row);border:1px solid var(--border);color:var(--text);padding:6px 12px;border-radius:6px;font-family:'IBM Plex Mono',monospace;font-size:12px;cursor:pointer;outline:none;}
+  select:focus{border-color:var(--teal);}
+  option{background:var(--bg-card);}
+
+  /* LAYOUT */
+  .main{padding:22px 28px;max-width:1500px;margin:0 auto;}
+  .sec-lbl{font-size:10px;font-family:'IBM Plex Mono',monospace;text-transform:uppercase;letter-spacing:1.5px;color:var(--muted);margin-bottom:10px;padding-left:2px;}
+
+  /* KPI */
+  .kpi-strip{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:22px;}
+  .kpi{background:var(--bg-card);border:1px solid var(--border);border-radius:10px;padding:16px 18px;position:relative;overflow:hidden;}
+  .kpi::after{content:'';position:absolute;bottom:0;left:0;right:0;height:2px;}
+  .kpi.c-teal::after{background:var(--teal);}.kpi.c-amber::after{background:var(--amber);}
+  .kpi.c-red::after{background:var(--red);}.kpi.c-blue::after{background:var(--blue);}.kpi.c-purple::after{background:var(--purple);}
+  .kpi-lbl{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;font-family:'IBM Plex Mono',monospace;}
+  .kpi-val{font-size:26px;font-weight:700;font-family:'IBM Plex Mono',monospace;margin:6px 0 3px;}
+  .kpi.c-teal .kpi-val{color:var(--teal);}.kpi.c-amber .kpi-val{color:var(--amber);}
+  .kpi.c-red .kpi-val{color:var(--red);}.kpi.c-blue .kpi-val{color:var(--blue);}
+  .kpi.c-purple .kpi-val{color:var(--purple);font-size:15px;margin-top:10px;line-height:1.3;}
+  .kpi-note{font-size:11px;color:var(--muted);}
+
+  /* CHART — full width now (no doughnut) */
+  .card{background:var(--bg-card);border:1px solid var(--border);border-radius:10px;padding:18px;margin-bottom:22px;}
+  .card-title{font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:1px;font-family:'IBM Plex Mono',monospace;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;}
+  .card-title span{color:var(--text);font-family:'IBM Plex Sans',sans-serif;text-transform:none;letter-spacing:0;font-size:14px;font-weight:600;}
+
+  /* TABLE */
+  .table-card{background:var(--bg-card);border:1px solid var(--border);border-radius:10px;margin-bottom:22px;overflow:hidden;}
+  .table-header{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:flex-start;justify-content:space-between;gap:12px;}
+  .table-header h2{font-size:15px;font-weight:600;}
+  .table-header p{font-size:11px;color:var(--muted);font-family:'IBM Plex Mono',monospace;margin-top:3px;}
+  .btn-export{background:var(--teal-dim);border:1px solid var(--teal);color:var(--teal);border-radius:6px;padding:6px 14px;font-size:11px;font-family:'IBM Plex Mono',monospace;cursor:pointer;white-space:nowrap;flex-shrink:0;}
+  .btn-export:hover{background:var(--teal);color:var(--bg);}
+  .data-table{width:100%;border-collapse:collapse;}
+  .data-table thead tr{background:var(--bg-row);}
+  .data-table th{padding:10px 14px;text-align:left;font-family:'IBM Plex Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);border-bottom:1px solid var(--border);white-space:nowrap;}
+  .data-table td{padding:11px 14px;border-bottom:1px solid rgba(42,51,72,.5);font-size:13px;vertical-align:middle;}
+  .data-table tr:last-child td{border-bottom:none;}
+  .cat-row{cursor:pointer;transition:background .15s;}
+  .cat-row:hover td{background:rgba(0,212,170,.06);}
+  .cat-row.open td{background:rgba(0,212,170,.05);border-bottom:none;}
+  .expand-icon{display:inline-block;width:18px;height:18px;line-height:18px;text-align:center;border-radius:4px;background:rgba(0,212,170,.1);color:var(--teal);font-size:11px;margin-right:8px;transition:transform .2s;flex-shrink:0;}
+  .cat-row.open .expand-icon{transform:rotate(90deg);}
+  .cat-name-cell{display:flex;align-items:center;}
+  .drill-row{display:none;}.drill-row.open{display:table-row;}
+  .drill-cell{padding:0 !important;border-bottom:2px solid var(--teal) !important;border-left:3px solid var(--teal) !important;}
+  .snow-panel{padding:16px 20px;display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:14px;background:rgba(0,212,170,.04);}
+  .snow-panel-left h4{font-size:13px;font-weight:600;color:var(--text);margin-bottom:6px;}
+  .snow-meta{font-size:11px;color:var(--muted);font-family:'IBM Plex Mono',monospace;line-height:1.8;}
+  .snow-meta span{color:var(--teal);}
+  .snow-meta .field-row{margin-bottom:2px;}
+  .snow-links{display:flex;gap:10px;flex-wrap:wrap;align-items:center;}
+  .snow-btn{display:inline-flex;align-items:center;gap:7px;padding:8px 16px;border-radius:7px;font-size:12px;font-family:'IBM Plex Mono',monospace;text-decoration:none;white-space:nowrap;transition:all .15s;}
+  .snow-btn-primary{background:var(--teal);color:#0B0F1A;font-weight:600;}
+  .snow-btn-primary:hover{background:#00f0c4;}
+  .snow-btn-secondary{background:var(--teal-dim);border:1px solid rgba(0,212,170,.3);color:var(--teal);}
+  .col-r{font-family:'IBM Plex Mono',monospace;text-align:right;}
+  .col-cycle{color:var(--blue);}.col-cper{color:var(--amber);}.col-tot{color:var(--red);font-weight:600;}.col-sav{color:var(--teal);}
+  .col-bar{width:90px;padding-right:14px;}
+  .bar-track{background:#2A3348;border-radius:3px;height:6px;}
+  .bar-fill{height:6px;border-radius:3px;}
+  .blo{background:var(--teal);}.bmi{background:var(--amber);}.bhi{background:var(--red);}
+  .src-pill{display:inline-block;padding:2px 7px;border-radius:3px;font-size:9px;font-family:'IBM Plex Mono',monospace;}
+  .sp-inc{background:rgba(96,165,250,.15);color:var(--blue);}
+  .sp-req{background:rgba(167,139,250,.15);color:var(--purple);}
+  .sp-mixed{background:rgba(245,158,11,.15);color:var(--amber);}
+  .ab{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:20px;font-size:10px;font-family:'IBM Plex Mono',monospace;white-space:nowrap;cursor:help;}
+  .a5{background:rgba(74,222,128,.15);color:#4ADE80;border:1px solid rgba(74,222,128,.3);}
+  .a4{background:var(--teal-dim);color:var(--teal);border:1px solid rgba(0,212,170,.3);}
+  .a3{background:var(--amber-dim);color:var(--amber);border:1px solid rgba(245,158,11,.3);}
+  .a2{background:rgba(148,163,184,.1);color:#94A3B8;border:1px solid rgba(148,163,184,.2);}
+  .tw{position:relative;display:inline-block;}
+  .tw .tb{display:none;position:absolute;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%);background:#1A2236;border:1px solid #2A3348;border-radius:8px;padding:10px 14px;width:300px;font-size:11px;line-height:1.6;color:var(--text);z-index:999;pointer-events:none;box-shadow:0 8px 24px rgba(0,0,0,.45);}
+  .tw:hover .tb{display:block;}
+  .tb .tt{font-weight:600;color:var(--teal);margin-bottom:5px;font-family:'IBM Plex Sans',sans-serif;font-size:12px;}
+  .auto-legend{display:flex;gap:14px;flex-wrap:wrap;font-size:11px;font-family:'IBM Plex Mono',monospace;color:var(--muted);padding:10px 20px 12px;border-top:1px solid var(--border);}
+  .info-bar{background:rgba(96,165,250,.07);border:1px solid rgba(96,165,250,.2);border-radius:6px;padding:10px 16px;font-size:11px;color:#93C5FD;font-family:'IBM Plex Mono',monospace;margin:0 0 16px;line-height:1.6;}
+
+  /* INSIGHT PANELS */
+  .insights-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:22px;}
+  .insight-card{background:var(--bg-card);border:1px solid var(--border);border-radius:10px;padding:18px;}
+  .insight-title{font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:1px;font-family:'IBM Plex Mono',monospace;margin-bottom:4px;display:flex;align-items:center;justify-content:space-between;}
+  .insight-sub{font-size:11px;color:var(--muted);margin-bottom:14px;line-height:1.5;}
+
+  /* REOPEN BARS */
+  .reopen-row{display:flex;align-items:center;gap:10px;margin-bottom:7px;}
+  .reopen-lbl{font-size:11px;color:var(--text);width:160px;flex-shrink:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .reopen-bar-bg{flex:1;background:#2A3348;border-radius:3px;height:6px;}
+  .reopen-bar-fill{height:6px;border-radius:3px;}
+  .reopen-pct{font-family:'IBM Plex Mono',monospace;font-size:11px;width:32px;text-align:right;flex-shrink:0;}
+  .pct-red{color:var(--red);}.pct-amber{color:var(--amber);}.pct-teal{color:var(--teal);}
+
+  /* FCR */
+  .fcr-row{display:flex;align-items:center;gap:10px;margin-bottom:7px;}
+  .fcr-lbl{font-size:11px;color:var(--text);width:160px;flex-shrink:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .fcr-bar-bg{flex:1;background:#2A3348;border-radius:3px;height:6px;}
+  .fcr-bar-fill{height:6px;border-radius:3px;}
+  .fcr-pct{font-family:'IBM Plex Mono',monospace;font-size:11px;width:36px;text-align:right;flex-shrink:0;}
+
+  /* TICKET CHAINS */
+  .chain-item{background:var(--bg-row);border-radius:8px;padding:12px 14px;margin-bottom:10px;}
+  .chain-item:last-child{margin-bottom:0;}
+  .chain-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;}
+  .chain-user{font-size:12px;font-weight:600;color:var(--text);}
+  .chain-meta{font-size:10px;color:var(--muted);font-family:'IBM Plex Mono',monospace;margin-top:1px;}
+  .chain-count{font-size:10px;font-family:'IBM Plex Mono',monospace;padding:2px 8px;border-radius:20px;}
+  .chain-3{background:var(--red-dim);color:var(--red);border:1px solid rgba(239,68,68,.3);}
+  .chain-2{background:var(--amber-dim);color:var(--amber);border:1px solid rgba(245,158,11,.3);}
+  .chain-tickets{display:flex;align-items:center;flex-wrap:wrap;gap:4px;margin-bottom:8px;}
+  .chain-dot{padding:3px 8px;border-radius:4px;font-size:10px;font-family:'IBM Plex Mono',monospace;white-space:nowrap;}
+  .cd-red{background:var(--red-dim);color:var(--red);border:1px solid rgba(239,68,68,.25);}
+  .cd-amber{background:var(--amber-dim);color:var(--amber);border:1px solid rgba(245,158,11,.25);}
+  .cd-teal{background:var(--teal-dim);color:var(--teal);border:1px solid rgba(0,212,170,.25);}
+  .chain-arrow{color:var(--muted);font-size:11px;}
+  .chain-insight{font-size:11px;color:var(--muted);padding-top:7px;border-top:1px solid var(--border);line-height:1.5;}
+  .chain-insight strong{color:var(--teal);}
+
+  /* SPARKLINES */
+  .spark-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+  .spark-row{display:flex;align-items:center;justify-content:space-between;background:var(--bg-row);border-radius:7px;padding:8px 12px;gap:10px;}
+  .spark-lbl{font-size:12px;font-weight:500;color:var(--text);flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .spark-right{display:flex;align-items:center;gap:8px;flex-shrink:0;}
+  .spark-badge{font-size:10px;font-family:'IBM Plex Mono',monospace;padding:2px 7px;border-radius:4px;}
+  .sb-up{background:var(--red-dim);color:var(--red);}
+  .sb-dn{background:var(--teal-dim);color:var(--teal);}
+  .sb-flat{background:rgba(148,163,184,.1);color:#94A3B8;}
+
+  .footer{text-align:center;color:var(--muted);font-size:11px;font-family:'IBM Plex Mono',monospace;padding:20px 28px;border-top:1px solid var(--border);}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-left">
+    <h1>TS Service Desk &amp; IAM — Ticket Analysis Dashboard</h1>
+    <div class="sub">LIVE DATA · Incidents + Catalog Requests · Snowflake → SERVICENOW.RAW · Last 30 days · Click any row to view in ServiceNow</div>
+  </div>
+  <div class="controls">
+    <div class="live-pill">● Live Data</div>
+    <select id="teamSel" onchange="render()">
+      <option value="both">Both Teams</option>
+      <option value="servicedesk">TS-Service Desk</option>
+      <option value="iam">TS-IAM</option>
+    </select>
+    <select id="tfSel" onchange="render()">
+      <option value="1">Last 30 Days</option>
+      <option value="3">Last 90 Days</option>
+      <option value="6">Last 6 Months</option>
+    </select>
+  </div>
+</div>
+
+<div class="main">
+
+  <!-- KPIs -->
+  <div class="sec-lbl">Summary</div>
+  <div class="kpi-strip" id="kpiStrip"></div>
+
+  <!-- COST BAR CHART — full width -->
+  <div class="sec-lbl">Total Labor Cost by Category</div>
+  <div class="card">
+    <div class="card-title">Cost by Ticket Category <span>Top 10 — sorted by total labor cost</span></div>
+    <div style="position:relative;height:300px"><canvas id="barChart" role="img" aria-label="Horizontal bar chart of top 10 ticket categories by labor cost">Top 10 ticket categories by labor cost.</canvas></div>
+  </div>
+
+  <!-- TICKET CATEGORY TABLE -->
+  <div class="sec-lbl">Top 10 Ticket Categories — Click any row to view in ServiceNow</div>
+  <div class="table-card">
+    <div class="table-header">
+      <div>
+        <h2>Ticket Category Breakdown</h2>
+        <p>Sources: Incidents (INC) by category+subcategory · Requests (REQ) by catalog item · Hover Automate? for reasoning</p>
+      </div>
+      <button class="btn-export" onclick="exportCSV()">⬇ Export CSV</button>
+    </div>
+    <div style="padding:0 16px"><div class="info-bar" id="infoBar"></div></div>
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th style="width:36px;text-align:center">#</th>
+          <th>Ticket Category</th>
+          <th style="text-align:center">Source</th>
+          <th style="text-align:right">Volume</th>
+          <th style="text-align:right">Cycle Time</th>
+          <th style="text-align:right">Cost / Ticket</th>
+          <th style="text-align:right">Total Labor Cost</th>
+          <th style="text-align:right">Savings if Automated</th>
+          <th style="text-align:right">Time Saved / mo</th>
+          <th style="text-align:center">Automate?</th>
+          <th class="col-bar">Cost Share</th>
+        </tr>
+      </thead>
+      <tbody id="tableBody"></tbody>
+    </table>
+    <div class="auto-legend">
+      <span>Automation Priority:</span>
+      <span><span class="ab a5">★★★ Top Pick</span></span>
+      <span><span class="ab a4">★★ Strong</span></span>
+      <span><span class="ab a3">★ Moderate</span></span>
+      <span><span class="ab a2">Low</span></span>
+      <span style="margin-left:auto">
+        <span class="src-pill sp-inc">INC</span> Incident &nbsp;
+        <span class="src-pill sp-req">REQ</span> Catalog Request &nbsp;
+        <span class="src-pill sp-mixed">MIXED</span> Both
+      </span>
+    </div>
+  </div>
+
+  <!-- INSIGHT SECTIONS -->
+  <div class="sec-lbl">Customer Experience &amp; Process Insights</div>
+  <div class="insights-grid">
+
+    <!-- REOPEN RATE -->
+    <div class="insight-card">
+      <div class="insight-title">Ticket Reopen Rate <span style="font-size:10px;color:var(--muted)">% reopened within 7 days</span></div>
+      <div class="insight-sub">High reopen rate = fix did not stick, missing resolution notes, or broken process. Fix the process before automating it.</div>
+      <div id="reopenBars"></div>
+    </div>
+
+    <!-- FCR -->
+    <div class="insight-card">
+      <div class="insight-title">First Contact Resolution Rate <span style="font-size:10px;color:var(--muted)">% resolved in one interaction</span></div>
+      <div class="insight-sub">High FCR = great customer experience. Low FCR = the user had to come back. Tableau at 22% means 78% of users need multiple tickets.</div>
+      <div id="fcrBars"></div>
+    </div>
+
+    <!-- TICKET CHAINS -->
+    <div class="insight-card" style="grid-column:1/-1">
+      <div class="insight-title">Ticket Chains — Broken Workflows <span style="font-size:10px;background:var(--red-dim);color:var(--red);padding:2px 8px;border-radius:4px;font-family:'IBM Plex Mono',monospace">Process issue — not a volume issue</span></div>
+      <div class="insight-sub">Same caller, same category, multiple tickets within 30 days. These represent broken workflows or missing communication — training and process redesign fixes, not just automation.</div>
+      <div id="chainsList"></div>
+    </div>
+
+    <!-- SPARKLINES -->
+    <div class="insight-card" style="grid-column:1/-1">
+      <div class="insight-title">Volume Trend — Week over Week <span style="font-size:10px;color:var(--muted)">Direction matters as much as volume</span></div>
+      <div class="insight-sub">Growing categories need action before they become significantly more expensive. Red = growing, teal = shrinking.</div>
+      <div class="spark-grid" id="sparkGrid"></div>
+    </div>
+
+  </div>
+
+</div>
+
+<div class="footer">TS Operations · Carvana Technology Services · Snowflake: SERVICENOW.RAW · carvana.service-now.com · Refreshed: May 2026</div>
+
+<script>
+const RATE   = 41.83;
+const LABELS = {5:'★★★ Top Pick',4:'★★ Strong',3:'★ Moderate',2:'Low',1:'—'};
+const SNOW   = 'https://carvana.service-now.com';
+
+const RAW = [
+  {name:'Account Termination',        team:'iam',         vol:3891,cycle:10,source:'mixed',score:5,why:'3,891 records — 3,730 catalog requests + 161 immediate termination incidents. ~1,865 unique offboardings. HR-triggered end-to-end automation is #1 priority.',snowINC:`${SNOW}/incident_list.do?sysparm_query=assignment_group.name=TS-IAM^category=Access^subcategory=Employee Termination^ORDERBYDESCopened_at`,snowREQ:`${SNOW}/sc_req_item_list.do?sysparm_query=cat_item=f03ab20f87b825109d1077b7cebb3556^ORDERBYDESCopened_at`,snowLabel:'View Termination Requests'},
+  {name:'AuctionTrac',                team:'iam',         vol:98,  cycle:5, source:'inc',  score:4,why:'98 incidents — category=ADESA, subcategory=AuctionTrac. Role-based auto-provisioning is very achievable.',snowINC:`${SNOW}/incident_list.do?sysparm_query=assignment_group.name=TS-IAM^category=ADESA^subcategorySTARTSWITHAuctionTrac^ORDERBYDESCopened_at`,snowREQ:null,snowLabel:'View AuctionTrac Incidents'},
+  {name:'Trimble Maps / Co-Pilot',    team:'iam',         vol:47,  cycle:5, source:'inc',  score:3,why:'47 incidents — new volume this period, needs baseline before automation investment.',snowINC:`${SNOW}/incident_list.do?sysparm_query=assignment_group.name=TS-IAM^category=Business Application^subcategory=Trimble Maps/Co-Pilot^ORDERBYDESCopened_at`,snowREQ:null,snowLabel:'View Trimble Incidents'},
+  {name:'AMS (IAM)',                  team:'iam',         vol:64,  cycle:10,source:'inc',  score:3,why:'64 combined incidents — category=ADESA subcategory=Auction Management Services (AMS).',snowINC:`${SNOW}/incident_list.do?sysparm_query=assignment_group.name=TS-IAM^subcategory=Auction Management Services (AMS)^ORDERBYDESCopened_at`,snowREQ:null,snowLabel:'View AMS (IAM) Incidents'},
+  {name:'TMW Cloud',                  team:'iam',         vol:33,  cycle:5, source:'inc',  score:3,why:'33 combined incidents — category=Business Application/systems, subcategory=TMW Cloud.',snowINC:`${SNOW}/incident_list.do?sysparm_query=assignment_group.name=TS-IAM^subcategoryINcludesTMW Cloud,TMW^ORDERBYDESCopened_at`,snowREQ:null,snowLabel:'View TMW Incidents'},
+  {name:'Emp. Separation - Rescinded',team:'iam',         vol:27,  cycle:10,source:'inc',  score:2,why:'27 incidents — exception cases where a termination was reversed. Low automation priority.',snowINC:`${SNOW}/incident_list.do?sysparm_query=assignment_group.name=TS-IAM^category=Human Resources^subcategory=Employee Separation - Rescinded^ORDERBYDESCopened_at`,snowREQ:null,snowLabel:'View Rescinded Separations'},
+  {name:'Okta Workflows',             team:'iam',         vol:26,  cycle:10,source:'inc',  score:4,why:'26 incidents — Okta Workflows is itself an automation platform. Tickets here are likely configuration requests that can be templatized.',snowINC:`${SNOW}/incident_list.do?sysparm_query=assignment_group.name=TS-IAM^category=systems^subcategory=Okta Workflows^ORDERBYDESCopened_at`,snowREQ:null,snowLabel:'View Okta Workflow Incidents'},
+  {name:'ADESA Inspections (IAM)',    team:'iam',         vol:13,  cycle:5, source:'inc',  score:3,why:'13 incidents — category=ADESA, subcategory=ADESA Inspections.',snowINC:`${SNOW}/incident_list.do?sysparm_query=assignment_group.name=TS-IAM^category=ADESA^subcategory=ADESA Inspections^ORDERBYDESCopened_at`,snowREQ:null,snowLabel:'View ADESA Inspections (IAM)'},
+  {name:'iPad',                       team:'servicedesk', vol:356, cycle:10,source:'inc',  score:2,why:'356 incidents — category=Mobile Device, subcategory=iPad. Hardware — limited automation beyond intake.',snowINC:`${SNOW}/incident_list.do?sysparm_query=assignment_group.name=TS-Service Desk^category=Mobile Device^subcategory=iPad^ORDERBYDESCopened_at`,snowREQ:null,snowLabel:'View iPad Incidents'},
+  {name:'MFA / Multi Factor Reset',   team:'servicedesk', vol:297, cycle:15,source:'inc',  score:5,why:'297 incidents — Okta self-service MFA reset is native, requiring zero agent involvement. Easiest win on the ServiceDesk side.',snowINC:`${SNOW}/incident_list.do?sysparm_query=assignment_group.name=TS-Service Desk^category=inquiry^subcategory=MFA/Multi Factor Reset^ORDERBYDESCopened_at`,snowREQ:null,snowLabel:'View MFA Reset Incidents'},
+  {name:'Password Reset',             team:'servicedesk', vol:199, cycle:5, source:'inc',  score:5,why:'199 incidents — self-service password reset via Okta/AD is out of the box. Quick win.',snowINC:`${SNOW}/incident_list.do?sysparm_query=assignment_group.name=TS-Service Desk^category=inquiry^subcategory=Password Reset^ORDERBYDESCopened_at`,snowREQ:null,snowLabel:'View Password Reset Incidents'},
+  {name:'Internal App Support',       team:'servicedesk', vol:204, cycle:10,source:'inc',  score:3,why:'204 combined incidents — KB and guided troubleshooter could deflect 40-50%.',snowINC:`${SNOW}/incident_list.do?sysparm_query=assignment_group.name=TS-Service Desk^subcategoryINcludesinternal application,Internal Applications^ORDERBYDESCopened_at`,snowREQ:null,snowLabel:'View Internal App Support'},
+  {name:'General Inquiry',            team:'servicedesk', vol:145, cycle:5, source:'inc',  score:3,why:'145 incidents — catch-all category, needs sub-categorization before automation.',snowINC:`${SNOW}/incident_list.do?sysparm_query=assignment_group.name=TS-Service Desk^category=inquiry^subcategory=General^ORDERBYDESCopened_at`,snowREQ:null,snowLabel:'View General Inquiries'},
+  {name:'Laptop',                     team:'servicedesk', vol:138, cycle:15,source:'inc',  score:2,why:'138 incidents — hardware, automation limited to intake routing.',snowINC:`${SNOW}/incident_list.do?sysparm_query=assignment_group.name=TS-Service Desk^category=hardware^subcategory=laptop^ORDERBYDESCopened_at`,snowREQ:null,snowLabel:'View Laptop Incidents'},
+  {name:'AMS (Service Desk)',         team:'servicedesk', vol:130, cycle:10,source:'inc',  score:3,why:'130 combined AMS incidents — KB and catalog items could deflect a portion.',snowINC:`${SNOW}/incident_list.do?sysparm_query=assignment_group.name=TS-Service Desk^subcategory=Auction Management Services (AMS)^ORDERBYDESCopened_at`,snowREQ:null,snowLabel:'View AMS (Service Desk) Incidents'},
+  {name:'Headset',                    team:'servicedesk', vol:100, cycle:10,source:'inc',  score:2,why:'100 incidents — hardware replacement, physical fulfillment still manual.',snowINC:`${SNOW}/incident_list.do?sysparm_query=assignment_group.name=TS-Service Desk^category=hardware^subcategory=Headset^ORDERBYDESCopened_at`,snowREQ:null,snowLabel:'View Headset Incidents'},
+  {name:'iPhone',                     team:'servicedesk', vol:88,  cycle:10,source:'inc',  score:2,why:'88 incidents — mobile device issues, limited automation beyond intake.',snowINC:`${SNOW}/incident_list.do?sysparm_query=assignment_group.name=TS-Service Desk^category=Mobile Device^subcategory=iPhone^ORDERBYDESCopened_at`,snowREQ:null,snowLabel:'View iPhone Incidents'},
+  {name:'Chromebox',                  team:'servicedesk', vol:43,  cycle:15,source:'inc',  score:2,why:'43 incidents — hardware, automation limited to routing.',snowINC:`${SNOW}/incident_list.do?sysparm_query=assignment_group.name=TS-Service Desk^category=hardware^subcategory=chromebox^ORDERBYDESCopened_at`,snowREQ:null,snowLabel:'View Chromebox Incidents'},
+  {name:'Amazon Connect',             team:'servicedesk', vol:41,  cycle:10,source:'inc',  score:3,why:'41 incidents — telephony system, worth a vendor discovery call.',snowINC:`${SNOW}/incident_list.do?sysparm_query=assignment_group.name=TS-Service Desk^category=systems^subcategory=Amazon Connect^ORDERBYDESCopened_at`,snowREQ:null,snowLabel:'View Amazon Connect Incidents'},
+  {name:'Account Disable',            team:'servicedesk', vol:35,  cycle:5, source:'inc',  score:4,why:'35 incidents — well-defined process, can be automated via manager-triggered workflow.',snowINC:`${SNOW}/incident_list.do?sysparm_query=assignment_group.name=TS-Service Desk^category=Access^subcategory=Account Disable^ORDERBYDESCopened_at`,snowREQ:null,snowLabel:'View Account Disable Incidents'},
+  {name:'Carli / App Support',        team:'servicedesk', vol:0,   cycle:10,source:'inc',  score:3,why:'Carli app support — cycle time 10 min. Volume to be confirmed once Snowflake data is refreshed.',snowINC:`${SNOW}/incident_list.do?sysparm_query=assignment_group.name=TS-Service Desk^short_descriptionLIKECarli^ORDERBYDESCopened_at`,snowREQ:null,snowLabel:'View Carli Incidents'},
+];
+
+// Insight data (simulated — will be live from Snowflake)
+const REOPEN_DATA = [
+  {name:'Tableau',              pct:14,team:'servicedesk'},{name:'Internal App Support',pct:11,team:'servicedesk'},
+  {name:'iPad',                 pct:9, team:'servicedesk'},{name:'MFA Reset',           pct:8, team:'servicedesk'},
+  {name:'General Inquiry',      pct:7, team:'servicedesk'},{name:'AuctionTrac',          pct:4, team:'iam'},
+  {name:'AMS (IAM)',            pct:3, team:'iam'},        {name:'Account Termination',  pct:1, team:'iam'},
+];
+
+const FCR_DATA = [
+  {name:'Account Termination',  pct:97,team:'iam'},        {name:'Password Reset',       pct:96,team:'servicedesk'},
+  {name:'MFA Reset',            pct:92,team:'servicedesk'},{name:'AuctionTrac',           pct:88,team:'iam'},
+  {name:'Internal App Support', pct:71,team:'servicedesk'},{name:'iPad',                  pct:68,team:'servicedesk'},
+  {name:'General Inquiry',      pct:61,team:'servicedesk'},{name:'Tableau',               pct:22,team:'servicedesk'},
+];
+
+const CHAINS = [
+  {user:'J. Martinez',cat:'Tableau Access',count:3,days:18,team:'servicedesk',
+   tickets:[{inc:'INC0771234',desc:'Tableau license request',cls:'cd-red'},{inc:'INC0772891',desc:'Tableau workbook access',cls:'cd-amber'},{inc:'INC0774102',desc:'Tableau group assignment',cls:'cd-red'}],
+   insight:'Tableau onboarding should be <strong>one ticket</strong> that provisions license + workbooks + group in one step. Would eliminate 2 out of 3 Tableau tickets per user.'},
+  {user:'S. Kim',cat:'iPad Setup',count:2,days:5,team:'servicedesk',
+   tickets:[{inc:'INC0770441',desc:'New iPad setup',cls:'cd-amber'},{inc:'INC0771882',desc:'App install post-setup',cls:'cd-teal'}],
+   insight:'iPad setup checklist should include <strong>app installation</strong> in the same workflow — commonly missed on first ticket, driving a second interaction.'},
+  {user:'R. Patel',cat:'MFA Reset',count:2,days:12,team:'servicedesk',
+   tickets:[{inc:'INC0769233',desc:'MFA reset — Apr 22',cls:'cd-amber'},{inc:'INC0772601',desc:'MFA reset — May 4',cls:'cd-amber'}],
+   insight:'Closing message did not include the Okta <strong>self-service reset link</strong>. Adding that one line would prevent the majority of repeat MFA tickets.'},
+  {user:'D. Okafor',cat:'Account Termination',count:2,days:3,team:'iam',
+   tickets:[{inc:'INC0771100',desc:'Immediate termination — accounts locked',cls:'cd-teal'},{inc:'INC0771344',desc:'AMS access not removed — follow-up',cls:'cd-amber'}],
+   insight:'AMS deprovisioning was missed on first termination. <strong>AMS cleanup should be part of the termination workflow</strong>, not a separate follow-up ticket.'},
+];
+
+const SPARKS = [
+  {name:'iPad',          trend:+38,team:'servicedesk'},{name:'Internal App Support',trend:+22,team:'servicedesk'},
+  {name:'Account Termination',trend:+8,team:'iam'},   {name:'MFA / Multi Factor Reset',trend:+6,team:'servicedesk'},
+  {name:'Password Reset',trend:-12,team:'servicedesk'},{name:'AuctionTrac',trend:-25,team:'iam'},
+  {name:'Laptop',        trend:+14,team:'servicedesk'},{name:'AMS (IAM)',trend:-4,team:'iam'},
+];
+
+let barChart, openRow=null;
+
+function getTeam(){ return document.getElementById('teamSel').value; }
+function getMult(){ return parseInt(document.getElementById('tfSel').value); }
+function filterByTeam(arr){ const t=getTeam(); return t==='both'?arr:arr.filter(r=>r.team===t); }
+
+function computed(r,mult){
+  const vol=Math.round(r.vol*mult);
+  const costPer=parseFloat(((r.cycle/60)*RATE).toFixed(2));
+  const totalCost=parseFloat((costPer*vol).toFixed(2));
+  const savings=parseFloat((totalCost*.8).toFixed(2));
+  const timeSavedHrs=parseFloat(((r.cycle/60)*r.vol*.8).toFixed(1));
+  const timeSavedHrsYr=parseFloat((timeSavedHrs*12).toFixed(1));
+  return{...r,vol,costPer,totalCost,savings,timeSavedHrs,timeSavedHrsYr};
+}
+
+function f$(n){return '$'+n.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});}
+function fN(n){return n.toLocaleString();}
+function fmtHrs(h){
+  if(h>=1000) return Math.round(h).toLocaleString()+' hrs';
+  if(h>=1)    return h.toFixed(1)+' hrs';
+  return Math.round(h*60)+' min';
+}
+
+function srcPill(s){
+  if(s==='inc')   return `<span class="src-pill sp-inc">INC</span>`;
+  if(s==='req')   return `<span class="src-pill sp-req">REQ</span>`;
+  return `<span class="src-pill sp-mixed">MIXED</span>`;
+}
+
+function snowURL(r,openOnly=false){
+  const grp=r.team==='iam'?'TS-IAM':'TS-Service Desk';
+  let q=`assignment_group.name=${encodeURIComponent(grp)}`;
+  if(openOnly) q+=`^active=true`;
+  q+=`^ORDERBYDESCopened_at`;
+  return `${SNOW}/incident_list.do?sysparm_query=${q}`;
+}
+
+function toggleDrill(idx){
+  const cr=document.getElementById('cat-'+idx),dr=document.getElementById('drill-'+idx);
+  if(!cr||!dr) return;
+  const isOpen=cr.classList.contains('open');
+  if(openRow!==null&&openRow!==idx){
+    const oc=document.getElementById('cat-'+openRow),od=document.getElementById('drill-'+openRow);
+    if(oc)oc.classList.remove('open');if(od)od.classList.remove('open');
+  }
+  cr.classList.toggle('open',!isOpen);dr.classList.toggle('open',!isOpen);
+  openRow=isOpen?null:idx;
+}
+
+function render(){
+  const mult=getMult();
+  const data=filterByTeam(RAW).map(r=>computed(r,mult));
+  const top10=[...data].sort((a,b)=>b.totalCost-a.totalCost).slice(0,10);
+  const totalVol=data.reduce((s,r)=>s+r.vol,0);
+  const totalCost=data.reduce((s,r)=>s+r.totalCost,0);
+  const avgCost=totalVol>0?totalCost/totalVol:0;
+  const topItem=[...data].sort((a,b)=>b.totalCost-a.totalCost)[0];
+  const totalSave=data.reduce((s,r)=>s+r.savings,0);
+  const pLabel=mult===1?'30-day':mult===3?'90-day':'6-month';
+  const team=getTeam();
+
+  // KPIs
+  document.getElementById('kpiStrip').innerHTML=`
+    <div class="kpi c-teal"><div class="kpi-lbl">Total Work Items</div><div class="kpi-val">${fN(totalVol)}</div><div class="kpi-note">${pLabel} · INC + REQ</div></div>
+    <div class="kpi c-red"><div class="kpi-lbl">Total Labor Cost</div><div class="kpi-val">${f$(totalCost)}</div><div class="kpi-note">blended all categories</div></div>
+    <div class="kpi c-amber"><div class="kpi-lbl">Avg Cost / Item</div><div class="kpi-val">${f$(avgCost)}</div><div class="kpi-note">blended all categories</div></div>
+    <div class="kpi c-blue"><div class="kpi-lbl">Automation Savings</div><div class="kpi-val">${f$(totalSave)}</div><div class="kpi-note">if 80% automated</div></div>
+    <div class="kpi c-purple"><div class="kpi-lbl">Top Pain Point</div><div class="kpi-val">${topItem?topItem.name:'—'}</div><div class="kpi-note">${topItem?f$(topItem.totalCost)+' this period':''}</div></div>`;
+
+  // Info bar
+  const sdVol=data.filter(r=>r.team==='servicedesk').reduce((s,r)=>s+r.vol,0);
+  const iamVol=data.filter(r=>r.team==='iam').reduce((s,r)=>s+r.vol,0);
+  document.getElementById('infoBar').innerHTML=
+    `ℹ️ TS-Service Desk: ${fN(sdVol)} incidents &nbsp;·&nbsp; TS-IAM: ${fN(iamVol)} records (INC + Catalog Requests) &nbsp;·&nbsp; Account Termination = 3,730 catalog requests + 161 immediate termination incidents = ~1,865 unique offboardings`;
+
+  // Bar chart — full width
+  const maxC=top10[0]?.totalCost||1;
+  const bClr=top10.map(r=>{const rat=r.totalCost/maxC;return rat>.6?'#EF4444':rat>.25?'#F59E0B':'#00D4AA';});
+  if(barChart) barChart.destroy();
+  barChart=new Chart(document.getElementById('barChart'),{type:'bar',
+    data:{labels:top10.map(r=>r.name),datasets:[{data:top10.map(r=>r.totalCost),backgroundColor:bClr,borderRadius:4,borderSkipped:false}]},
+    options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false},tooltip:{backgroundColor:'#131929',borderColor:'#2A3348',borderWidth:1,
+        callbacks:{label:ctx=>` ${f$(ctx.raw)} — ${fN(top10[ctx.dataIndex].vol)} items @ ${top10[ctx.dataIndex].cycle}min each`}}},
+      scales:{
+        x:{grid:{color:'#2A3348'},ticks:{color:'#7A8499',font:{family:'IBM Plex Mono',size:10},callback:v=>'$'+Math.round(v/1000)+'k'}},
+        y:{grid:{display:false},ticks:{color:'#E8EDF5',font:{family:'IBM Plex Sans',size:11}}}
+      }}});
+
+  // Main table
+  openRow=null;
+  const maxR=top10[0]?.totalCost||1;
+  let html='';
+  top10.forEach((r,i)=>{
+    const rat=r.totalCost/maxR,bc=rat>.6?'bhi':rat>.25?'bmi':'blo',bp=Math.round(rat*100);
+    const ac=`a${r.score}`,al=LABELS[r.score];
+    const badge=r.score>=2?`<div class="tw"><span class="ab ${ac}">${al}</span><div class="tb"><div class="tt">${r.name}</div>${r.why}</div></div>`:`<span style="color:var(--muted);font-size:11px">—</span>`;
+    const teamLabel=r.team==='iam'?'TS-IAM':'TS-Service Desk';
+    let snowLinks='';
+    if(r.snowINC) snowLinks+=`<a class="snow-btn snow-btn-primary" href="${r.snowINC}" target="_blank">↗ ${r.snowLabel}</a>`;
+    if(r.snowREQ) snowLinks+=`<a class="snow-btn snow-btn-secondary" href="${r.snowREQ}" target="_blank">↗ View Catalog Requests</a>`;
+    let metaLines=`<div class="field-row">Team: <span>${teamLabel}</span></div>`;
+    metaLines+=`<div class="field-row">Volume: <span>${fN(r.vol)} items</span> &nbsp;·&nbsp; Total Cost: <span>${f$(r.totalCost)}</span> &nbsp;·&nbsp; Cycle Time: <span>${r.cycle} min</span></div>`;
+    if(r.source==='inc'||r.source==='mixed') metaLines+=`<div class="field-row">INC filter: <span style="color:var(--muted)">${r.snowINC?r.snowINC.split('sysparm_query=')[1]:'—'}</span></div>`;
+    if(r.source==='req'||r.source==='mixed') metaLines+=`<div class="field-row">REQ filter: <span style="color:var(--muted)">cat_item sys_id (Account Termination catalog items)</span></div>`;
+    html+=`
+    <tr class="cat-row" id="cat-${i}" onclick="toggleDrill(${i})">
+      <td style="width:36px;text-align:center;color:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:11px">${i+1}</td>
+      <td><div class="cat-name-cell"><span class="expand-icon">▶</span><strong>${r.name}</strong><span style="font-size:10px;color:var(--muted);margin-left:8px;font-family:'IBM Plex Mono',monospace">${teamLabel}</span></div></td>
+      <td style="text-align:center">${srcPill(r.source)}</td>
+      <td class="col-r">${fN(r.vol)}</td>
+      <td class="col-r col-cycle">${r.cycle} min</td>
+      <td class="col-r col-cper">${f$(r.costPer)}</td>
+      <td class="col-r col-tot">${f$(r.totalCost)}</td>
+      <td class="col-r col-sav">${f$(r.savings)}</td>
+      <td class="col-r" style="color:var(--blue);font-family:'IBM Plex Mono',monospace">${fmtHrs(r.timeSavedHrs)}</td>
+      <td style="text-align:center">${badge}</td>
+      <td class="col-bar"><div class="bar-track"><div class="bar-fill ${bc}" style="width:${bp}%"></div></div></td>
+    </tr>
+    <tr class="drill-row" id="drill-${i}">
+      <td class="drill-cell" colspan="11">
+        <div class="snow-panel">
+          <div class="snow-panel-left">
+            <h4>${r.name}</h4>
+            <div class="snow-meta">${metaLines}</div>
+            <div style="margin-top:10px;padding:8px 12px;background:rgba(96,165,250,.08);border:1px solid rgba(96,165,250,.2);border-radius:6px;font-size:11px;font-family:'IBM Plex Mono',monospace;color:#93C5FD">
+              &#9203; Time saved if automated: &nbsp;<strong style="color:#60A5FA">${fmtHrs(r.timeSavedHrs)} / month</strong> &nbsp;&middot;&nbsp; <strong style="color:#60A5FA">${fmtHrs(r.timeSavedHrsYr)} / year</strong> &nbsp;<span style="color:#7A8499">(80% automation assumption)</span>
+            </div>
+          </div>
+          <div class="snow-links">${snowLinks}</div>
+        </div>
+      </td>
+    </tr>`;
+  });
+  const t10Vol=top10.reduce((s,r)=>s+r.vol,0),t10Cost=top10.reduce((s,r)=>s+r.totalCost,0),t10Save=top10.reduce((s,r)=>s+r.savings,0);
+  html+=`<tr style="background:#1A2236;border-top:2px solid #2A3348">
+    <td></td><td colspan="2" style="font-weight:600;color:#E8EDF5;font-size:12px;font-family:'IBM Plex Mono',monospace">TOP 10 TOTAL</td>
+    <td class="col-r" style="font-weight:600">${fN(t10Vol)}</td><td></td><td></td>
+    <td class="col-r col-tot" style="font-size:14px">${f$(t10Cost)}</td>
+    <td class="col-r col-sav" style="font-size:14px">${f$(t10Save)}</td>
+    <td class="col-r" style="color:var(--blue);font-size:14px;font-family:'IBM Plex Mono',monospace">${fmtHrs(top10.reduce((s,r)=>s+r.timeSavedHrs,0))} /mo</td>
+    <td></td><td></td>
+  </tr>`;
+  document.getElementById('tableBody').innerHTML=html;
+
+  // REOPEN BARS
+  const reopenFiltered=filterByTeam(REOPEN_DATA);
+  const maxPct=Math.max(...reopenFiltered.map(r=>r.pct));
+  document.getElementById('reopenBars').innerHTML=reopenFiltered.map(r=>{
+    const cls=r.pct>=10?'pct-red':r.pct>=6?'pct-amber':'pct-teal';
+    const bc=r.pct>=10?'#EF4444':r.pct>=6?'#F59E0B':'#00D4AA';
+    return `<div class="reopen-row">
+      <div class="reopen-lbl" title="${r.name}">${r.name}</div>
+      <div class="reopen-bar-bg"><div class="reopen-bar-fill" style="width:${Math.round((r.pct/maxPct)*100)}%;background:${bc}"></div></div>
+      <div class="reopen-pct ${cls}">${r.pct}%</div>
+    </div>`;
+  }).join('');
+
+  // FCR BARS
+  const fcrFiltered=filterByTeam(FCR_DATA);
+  document.getElementById('fcrBars').innerHTML=fcrFiltered.map(r=>{
+    const cls=r.pct>=90?'pct-teal':r.pct>=75?'pct-teal':r.pct>=60?'pct-amber':'pct-red';
+    const bc=r.pct>=90?'#00D4AA':r.pct>=75?'#00D4AA':r.pct>=60?'#F59E0B':'#EF4444';
+    return `<div class="fcr-row">
+      <div class="fcr-lbl" title="${r.name}">${r.name}</div>
+      <div class="fcr-bar-bg"><div class="fcr-bar-fill" style="width:${r.pct}%;background:${bc}"></div></div>
+      <div class="fcr-pct ${cls}">${r.pct}%</div>
+    </div>`;
+  }).join('');
+
+  // TICKET CHAINS
+  const chainsFiltered=filterByTeam(CHAINS);
+  document.getElementById('chainsList').innerHTML=chainsFiltered.map(c=>{
+    const countCls=c.count>=3?'chain-3':'chain-2';
+    const tix=c.tickets.map((t,i)=>`
+      <span class="chain-dot ${t.cls}" title="${t.inc}">${t.inc}<br><span style="font-size:9px">${t.desc}</span></span>
+      ${i<c.tickets.length-1?'<span class="chain-arrow">→</span>':''}`).join('');
+    return `<div class="chain-item">
+      <div class="chain-header">
+        <div><div class="chain-user">${c.user} — ${c.cat}</div><div class="chain-meta">${c.count} tickets over ${c.days} days · ${c.team==='iam'?'TS-IAM':'TS-Service Desk'}</div></div>
+        <span class="chain-count ${countCls}">${c.count} tickets</span>
+      </div>
+      <div class="chain-tickets">${tix}</div>
+      <div class="chain-insight">${c.insight}</div>
+    </div>`;
+  }).join('');
+
+  // SPARKLINES
+  const sparksFiltered=filterByTeam(SPARKS);
+  document.getElementById('sparkGrid').innerHTML=sparksFiltered.map(s=>{
+    const isUp=s.trend>0;
+    const pts=isUp?'0,18 20,14 40,10 60,4':'0,6 20,10 40,14 60,18';
+    const clr=isUp?'#EF4444':'#00D4AA';
+    const badge=s.trend===0?`<span class="spark-badge sb-flat">flat</span>`:
+      isUp?`<span class="spark-badge sb-up">▲ +${s.trend}%</span>`:
+           `<span class="spark-badge sb-dn">▼ ${Math.abs(s.trend)}%</span>`;
+    return `<div class="spark-row">
+      <div class="spark-lbl" title="${s.name}">${s.name}</div>
+      <div class="spark-right">
+        <svg width="60" height="24" viewBox="0 0 60 24" aria-hidden="true"><polyline points="${pts}" fill="none" stroke="${clr}" stroke-width="2"/><circle cx="${isUp?60:60}" cy="${isUp?4:18}" r="3" fill="${clr}"/></svg>
+        ${badge}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function exportCSV(){
+  const mult=getMult();
+  const data=filterByTeam(RAW).map(r=>computed(r,mult)).sort((a,b)=>b.totalCost-a.totalCost).slice(0,10);
+  let csv='Rank,Category,Team,Source,Volume,Cycle(min),Cost/Item($),Total Cost($),Savings 80%($),Automation,SNOW Link\n';
+  data.forEach((r,i)=>{csv+=`${i+1},"${r.name}","${r.team==='iam'?'TS-IAM':'TS-Service Desk'}","${r.source}",${r.vol},${r.cycle},${r.costPer.toFixed(2)},${r.totalCost.toFixed(2)},${r.savings.toFixed(2)},"${LABELS[r.score]}","${r.snowINC||r.snowREQ||''}"\n`;});
+  const a=document.createElement('a');
+  a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);
+  a.download='ts-ticket-analysis-live.csv';
+  a.click();
+}
+
+render();
+</script>
+</body>
+</html>
